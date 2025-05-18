@@ -1,6 +1,6 @@
-from flask import render_template, jsonify, request
+from flask import render_template, jsonify, request, redirect, url_for, flash
 from views import dashboard_view, machine_view
-from controllers import get_process_data, get_machine_data, update_machine_status
+from controllers import get_process_data, get_machine_data, update_machine_status, register_user, authenticate_user, logout_user, login_required
 import datetime
 
 def register_routes(app):
@@ -8,6 +8,7 @@ def register_routes(app):
     
     # Web UI routes
     @app.route('/')
+    @login_required
     def index():
         """Main dashboard page"""
         return dashboard_view()
@@ -16,6 +17,39 @@ def register_routes(app):
     def machine_detail(process_name, machine_id):
         """Machine detail view"""
         return machine_view(process_name, machine_id)
+        
+    # User authentication routes
+    @app.route('/register', methods=['GET', 'POST'])
+    def register():
+        if request.method == 'POST':
+            email = request.form['email']
+            password = request.form['password']
+            success, message = register_user(email, password)
+            if success:
+                flash(message, 'success')
+                return redirect(url_for('login'))
+            else:
+                flash(message, 'danger')
+        return render_template('register.html')
+
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        if request.method == 'POST':
+            email = request.form['email']
+            password = request.form['password']
+            success, message = authenticate_user(email, password)
+            if success:
+                flash(message, 'success')
+                return redirect(url_for('index'))
+            else:
+                flash(message, 'danger')
+        return render_template('login.html')
+
+    @app.route('/logout')
+    def logout():
+        logout_user()
+        flash('Logged out successfully.', 'info')
+        return redirect(url_for('login'))
         
     # API routes
     @app.route('/api/process-data', methods=['GET'])

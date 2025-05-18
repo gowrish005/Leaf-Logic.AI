@@ -1,5 +1,5 @@
 from flask import Flask
-from routes_new import register_routes
+from routes import register_routes
 from models import init_db, clean_database, initialize_models, generate_readings
 from controllers import get_process_data
 import threading
@@ -10,6 +10,9 @@ app = Flask(__name__,
             static_url_path='', 
             static_folder='static',
             template_folder='templates')
+
+# Toggle this to enable/disable test/console output
+app.testing = False
 
 # Load configuration
 app.config['SECRET_KEY'] = 'tea-processing-monitor-secret-key'
@@ -38,7 +41,8 @@ def background_data_generation():
                 # Close the connection after use
                 mongo_client.close()
             except Exception as e:
-                print(f"Error in background data generation: {e}")
+                if getattr(app, 'testing', True):
+                    print(f"Error in background data generation: {e}")
             
             # Sleep for 30 seconds before next cycle
             time.sleep(30)
@@ -63,17 +67,19 @@ def inject_processes():
             mongo_client.close()
             return {'processes': processes}
         except Exception as e:
-            print(f"Error getting process data in context processor: {e}")
-            import traceback
-            traceback.print_exc()
+            if getattr(app, 'testing', True):
+                print(f"Error getting process data in context processor: {e}")
+                import traceback
+                traceback.print_exc()
             # Close the connection if error
             mongo_client.close()
             return {'processes': []}
     except Exception as e:
         # In case of error, return an empty list to prevent the app from crashing
-        print(f"Error in inject_processes context processor: {e}")
-        import traceback
-        traceback.print_exc()
+        if getattr(app, 'testing', True):
+            print(f"Error in inject_processes context processor: {e}")
+            import traceback
+            traceback.print_exc()
         return {'processes': []}
 
 # Register routes
@@ -102,4 +108,4 @@ if __name__ == '__main__':
     bg_thread.daemon = True  # Thread will exit when main thread exits
     bg_thread.start()
     
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

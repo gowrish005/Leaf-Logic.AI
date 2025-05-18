@@ -1,6 +1,9 @@
 from models import get_db
 import pprint  # For debugging purposes
 import datetime
+from flask import render_template, request, redirect, url_for, flash, session
+from models import register_user, authenticate_user, logout_user
+from functools import wraps
 
 def get_process_data(process_name=None):
     """
@@ -441,3 +444,54 @@ def update_machine_status(machine_id, data):
         import traceback
         traceback.print_exc()
         return {"success": False, "error": str(e)}
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapped_view(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page.', 'warning')
+            return redirect(url_for('login'))
+        return view_func(*args, **kwargs)
+    return wrapped_view
+
+def register_routes(app):
+    from flask import render_template, request, redirect, url_for, flash, session
+    from models import register_user, authenticate_user, logout_user
+
+    @app.route('/register', methods=['GET', 'POST'])
+    def register():
+        if request.method == 'POST':
+            email = request.form['email']
+            password = request.form['password']
+            success, message = register_user(email, password)
+            if success:
+                flash(message, 'success')
+                return redirect(url_for('login'))
+            else:
+                flash(message, 'danger')
+        return render_template('register.html')
+
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        if request.method == 'POST':
+            email = request.form['email']
+            password = request.form['password']
+            success, message = authenticate_user(email, password)
+            if success:
+                flash(message, 'success')
+                return redirect(url_for('index'))
+            else:
+                flash(message, 'danger')
+        return render_template('login.html')
+
+    @app.route('/logout')
+    def logout():
+        logout_user()
+        flash('Logged out successfully.', 'info')
+        return redirect(url_for('login'))
+
+    @app.route('/')
+    @login_required
+    def index():
+        # ...existing dashboard logic...
+        return render_template('dashboard.html')

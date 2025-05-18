@@ -1,7 +1,8 @@
-from flask import g
+from flask import g, session
 import datetime
 import random
 from pymongo import MongoClient
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Define technical specifications for each machine type
 MACHINE_SPECS = {
@@ -732,7 +733,9 @@ def generate_readings():
         if readings:
             collection_name = processes[process_id]["data_collection"]
             db[collection_name].insert_many(readings)
-            print(f"Generated {len(readings)} readings for {process_id}")
+            from flask import current_app
+            if getattr(current_app, 'testing', True):
+                print(f"Generated {len(readings)} readings for {process_id}")
     
     return True
 
@@ -815,3 +818,22 @@ def get_historical_readings(machine_id, limit=100):
     ))
     
     return readings
+
+def register_user(email, password):
+    db = get_db()
+    if db.users.find_one({"email": email}):
+        return False, "Email already registered."
+    hashed_password = generate_password_hash(password)
+    db.users.insert_one({"email": email, "password": hashed_password})
+    return True, "Registration successful."
+
+def authenticate_user(email, password):
+    db = get_db()
+    user = db.users.find_one({"email": email})
+    if user and check_password_hash(user["password"], password):
+        session['user_id'] = str(user['_id'])
+        return True, "Login successful."
+    return False, "Invalid email or password."
+
+def logout_user():
+    session.pop('user_id', None)
