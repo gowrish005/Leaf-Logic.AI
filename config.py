@@ -7,10 +7,10 @@ load_dotenv()
 # Configuration class with default values and environment variable overrides
 class Config:
     # MongoDB settings
-    MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/tea_processing')
+    MONGO_URI = os.getenv('MONGO_URI', 'mongodb+srv://gowrish:ftG3flLkxYpdZ0tN@cluster0.el1hbyt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
     
     # Secret key for session
-    SECRET_KEY = os.getenv('SECRET_KEY', 'tea-processing-monitor-secret-key')
+    SECRET_KEY = os.getenv('SECRET_KEY', 'I3BBj0F90y')
     
     # Application settings
     DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
