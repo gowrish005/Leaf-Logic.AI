@@ -39,8 +39,8 @@ function loadDashboardData() {
             updateStatusCounts(data);
             // Hide loading overlay if it exists
             let loadingOverlay = document.getElementById('loading-overlay');
-            if (loadingOverlay) {
-                document.body.removeChild(loadingOverlay);
+            if (loadingOverlay && loadingOverlay.parentNode) {
+                loadingOverlay.parentNode.removeChild(loadingOverlay);
             }
         })
         .catch(error => {
@@ -48,8 +48,8 @@ function loadDashboardData() {
             showErrorNotification('Failed to load dashboard data. Please check your connection.');
             // Hide loading overlay if it exists, even on error
             let loadingOverlay = document.getElementById('loading-overlay');
-            if (loadingOverlay) {
-                document.body.removeChild(loadingOverlay);
+            if (loadingOverlay && loadingOverlay.parentNode) {
+                loadingOverlay.parentNode.removeChild(loadingOverlay);
             }
         });
 }
@@ -95,7 +95,15 @@ function updateDashboardUI(processes) {
 // Update status counts in the system overview
 function updateStatusCounts(processes) {
     // Skip if we're not on the dashboard page
-    if (!document.getElementById('running-count')) return;
+    if (!document.getElementById('running-count')) {
+        console.log("Missing UI element 'running-count' - not updating status counts");
+        return;
+    }
+    
+    if (!processes || !Array.isArray(processes)) {
+        console.error("Invalid processes data for status counts:", processes);
+        return;
+    }
     
     let runningCount = 0;
     let idleCount = 0;

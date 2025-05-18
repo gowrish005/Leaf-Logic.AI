@@ -99,6 +99,25 @@ a:hover {
     display: flex;
     justify-content: center;
     align-items: center;
+    animation: preloader-fadeout 3s forwards;
+}
+
+@keyframes preloader-fadeout {
+    0% {
+        opacity: 1;
+        pointer-events: all;
+        visibility: visible;
+    }
+    90% {
+        opacity: 1;
+        pointer-events: all;
+        visibility: visible;
+    }
+    100% {
+        opacity: 0;
+        pointer-events: none;
+        visibility: hidden;
+    }
 }
 
 .loader {

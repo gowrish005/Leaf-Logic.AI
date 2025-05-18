@@ -19,9 +19,11 @@
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- AOS - Animate On Scroll -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">    <link rel="stylesheet" href="{{ url_for('static', filename='css/predictive-maintenance.css') }}">
+    <!-- ScrollReveal - Animate On Scroll Replacement -->
+    <script src="https://unpkg.com/scrollreveal"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/predictive-maintenance.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/technical-specs.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/chart-enhancement.css') }}">
       <style>
@@ -380,7 +382,7 @@
         
         .btn-outline-light {
             border-color: var(--border-color);
-            color: var(--text-color);
+            color: var (--text-color);
         }
         
         .btn-outline-light:hover {
@@ -396,7 +398,7 @@
     <!-- Preloader -->
     <div id="preloader">
         <div class="loader">
-            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Leaf Logic AI Logo" class="preloader-logo">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Leaf Logic AI Logo" class="preloader-logo" loading="lazy">
         </div>
     </div>
 
@@ -405,7 +407,7 @@
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <div class="brand-icon">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Leaf Logic AI Logo" height="40">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Leaf Logic AI Logo" height="40" loading="lazy">
                 </div>
                 <div>
                     <div class="brand-text">Leaf Logic AI</div>
@@ -453,7 +455,7 @@
                 <div class="col-md-4 mb-4 mb-md-0">
                     <div class="footer-brand">
                         <div class="brand-icon">
-                            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Leaf Logic AI Logo" height="30">
+                            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Leaf Logic AI Logo" height="30" loading="lazy">
                         </div>
                         <div class="brand-text">Leaf Logic AI</div>
                     </div>
@@ -503,24 +505,37 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- AOS - Animate On Scroll -->
-    <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+    <!-- ScrollReveal - Animate On Scroll Replacement -->
+    <script src="https://unpkg.com/scrollreveal"></script>
     
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    
-    <script>
+      <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize AOS
-            AOS.init({
-                once: true,
-                duration: 800,
-                easing: 'ease-in-out'
+            // Initialize ScrollReveal animations
+            ScrollReveal().reveal('.machine-analytics-card', {
+                distance: '40px',
+                duration: 700,
+                easing: 'ease-in-out',
+                origin: 'bottom',
+                interval: 100,
+                reset: false
             });
             
             // Initialize Bootstrap tooltips
             const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
             const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+            
+            // Create loading overlay
+            const loadingOverlay = document.createElement('div');
+            loadingOverlay.id = 'loading-overlay';
+            loadingOverlay.innerHTML = `
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>Loading Tea Processing Monitor...</p>
+            `;
+            document.body.appendChild(loadingOverlay);
             
             // Handle preloader
             setTimeout(function() {
@@ -867,7 +882,8 @@
                     });
                 }
             }
-        });    </script>
+        });
+    </script>
     
     <!-- Analytics Modal -->
     <div class="modal fade" id="analyticsModal" tabindex="-1" aria-labelledby="analyticsModalLabel" aria-hidden="true">
@@ -936,7 +952,7 @@
                                         </div>
                                         <div class="machine-card-body">
                                             {% if machine.image_url %}
-                                            <img src="{{ url_for('static', filename=machine.image_url) }}" alt="{{ machine.name }}" class="machine-thumbnail">
+                                            <img src="{{ url_for('static', filename=machine.image_url) }}" alt="{{ machine.name }}" class="machine-thumbnail" loading="lazy">
                                             {% else %}
                                             <div class="machine-icon">
                                                 <i class="fas fa-microchip"></i>

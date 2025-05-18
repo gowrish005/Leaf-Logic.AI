@@ -1,5 +1,5 @@
 from flask import Flask
-from routes import register_routes
+from routes_new import register_routes
 from models import init_db, clean_database, initialize_models, generate_readings
 from controllers import get_process_data
 import threading
@@ -63,13 +63,17 @@ def inject_processes():
             mongo_client.close()
             return {'processes': processes}
         except Exception as e:
-            print(f"Error getting process data: {e}")
+            print(f"Error getting process data in context processor: {e}")
+            import traceback
+            traceback.print_exc()
             # Close the connection if error
             mongo_client.close()
             return {'processes': []}
     except Exception as e:
         # In case of error, return an empty list to prevent the app from crashing
-        print(f"Error in inject_processes: {e}")
+        print(f"Error in inject_processes context processor: {e}")
+        import traceback
+        traceback.print_exc()
         return {'processes': []}
 
 # Register routes
