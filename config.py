@@ -22,3 +22,6 @@ class Config:
     
     # Set to True to skip database initialization on startup (useful for production)
     SKIP_DB_INIT = os.getenv('SKIP_DB_INIT', 'False').lower() in ('true', '1', 't')
+    
+    # Allowed domains for CORS and trusted hosts
+    ALLOWED_HOSTS = ['leaf-logic-ai.onrender.com', 'www.leaflogic.pro', 'leaflogic.pro']

@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from routes import register_routes
 from models import init_db, clean_database, initialize_models, generate_readings
 from controllers import get_process_data
@@ -12,6 +12,13 @@ app = Flask(__name__,
             static_url_path='', 
             static_folder='static',
             template_folder='templates')
+
+# Add custom domains to trusted hosts
+@app.before_request
+def validate_host():
+    if request.host not in Config.ALLOWED_HOSTS:
+        allowed_hosts = ', '.join(Config.ALLOWED_HOSTS)
+        print(f"Warning: Request with unknown host: {request.host}. Allowed hosts: {allowed_hosts}")
 
 # Load configuration from Config class
 app.config.from_object(Config)
