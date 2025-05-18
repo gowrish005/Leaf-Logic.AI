@@ -2,12 +2,16 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file if it exists
-load_dotenv()
+try:
+    load_dotenv()
+except Exception as e:
+    print(f"Warning: Could not load .env file: {e}")
+    print("Continuing with default values.")
 
 # Configuration class with default values and environment variable overrides
 class Config:
     # MongoDB settings
-    MONGO_URI = os.getenv('MONGO_URI', 'mongodb+srv://gowrish:ftG3flLkxYpdZ0tN@cluster0.el1hbyt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
+    MONGO_URI = os.getenv('MONGO_URI', 'mongodb+srv://gowrish:ftG3flLkxYpdZ0tN@cluster0.el1hbyt.mongodb.net/gowrish?retryWrites=true&w=majority&appName=Cluster0')
     
     # Secret key for session
     SECRET_KEY = os.getenv('SECRET_KEY', 'I3BBj0F90y')
