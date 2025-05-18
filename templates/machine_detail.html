@@ -1,0 +1,1694 @@
+{% extends "base.html" %}
+
+{% block title %}{{ machine.name }} - Tea Processing Monitor{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" data-aos="fade-right">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}"><i class="fas fa-home"></i> Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ machine.name }}</li>
+        </ol>
+    </nav>
+    
+    <!-- Machine Detail Header -->
+    <section class="mb-5" data-aos="fade-up">
+        <div class="system-overview">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h2 class="mb-3">{{ machine.name }}</h2>
+                    <p class="text">{{ machine.description }}</p>
+                    <div class="d-flex align-items-center mt-3">
+                        <span class="status-indicator status-{{ machine.status }} me-2"></span>
+                        <span class="badge {% if machine.status == 'running' %}bg-success{% elif machine.status == 'idle' %}bg-warning{% elif machine.status == 'maintenance' %}bg-info{% else %}bg-danger{% endif %} me-3">
+                            {{ machine.status|capitalize }}
+                        </span>
+                        <span class="text">Last Updated : {{ machine.last_updated }}</span>
+                    </div>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <div class="btn-group">
+                        <button class="btn btn-success control-action">
+                            <i class="fas fa-play me-2"></i> Start
+                        </button>
+                        <button class="btn btn-warning control-action">
+                            <i class="fas fa-pause me-2"></i> Pause
+                        </button>
+                        <button class="btn btn-info control-action">
+                            <i class="fas fa-sync me-2"></i> Reset
+                        </button>
+                        <button class="btn btn-danger control-action">
+                            <i class="fas fa-power-off me-2"></i> Stop
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Process Info -->
+    <section class="mb-5" data-aos="fade-up">
+        <div class="section-title">
+            <h2>Process Information</h2>
+        </div>
+        <div class="row">
+            <div class="col-md-4 mb-4" data-aos="fade-up" data-aos-delay="100">
+                <div class="metric-card p-4 text-center">
+                    <i class="fas fa-layer-group metric-icon text-primary"></i>
+                    <div class="metric-value">{{ process.order }}</div>
+                    <div class="metric-label">Process Order</div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4" data-aos="fade-up" data-aos-delay="200">
+                <div class="metric-card p-4 text-center">
+                    <i class="fas fa-tasks metric-icon text-info"></i>
+                    <div class="metric-value">{{ process.name }}</div>
+                    <div class="metric-label">Process Name</div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4" data-aos="fade-up" data-aos-delay="300">
+                <div class="metric-card p-4 text-center">
+                    <i class="fas fa-box metric-icon text-success"></i>
+                    <div class="metric-value">{{ machine.capacity }}</div>
+                    <div class="metric-label">
+                        {% if "kg/hour" in machine.capacity|string %}
+                            Capacity (kg/hour)
+                        {% elif "kg" in machine.capacity|string %}
+                            Capacity (kg)
+                        {% elif "bags/hour" in machine.capacity|string %}
+                            Capacity (bags/hour)
+                        {% else %}
+                            Capacity
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+      <!-- Real-time Metrics -->
+    <section class="mb-5" data-aos="fade-up">
+        <div class="section-title">
+            <h2>Real-time Metrics</h2>
+        </div>
+        
+        <!-- Time Range Selector -->
+        <div class="btn-group mb-4">
+            <button class="btn btn-outline-light time-range active" onclick="updateChartTimeRange('1h')">1 Hour</button>
+            <button class="btn btn-outline-light time-range" onclick="updateChartTimeRange('6h')">6 Hours</button>
+            <button class="btn btn-outline-light time-range" onclick="updateChartTimeRange('24h')">24 Hours</button>
+            <button class="btn btn-outline-light time-range" onclick="updateChartTimeRange('7d')">7 Days</button>
+        </div>
+        
+        <!-- Voltage and Temperature Charts -->
+        <div class="row mb-4">
+            <div class="col-md-6" data-aos="fade-right">
+                <div class="chart-container">
+                    <h5 class="text-center mb-3">Voltage Stability</h5>
+                    <canvas id="voltageChart"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6" data-aos="fade-left">
+                <div class="chart-container">
+                    <h5 class="text-center mb-3">
+                    {% if machine.process_id in ['withering', 'fermentation', 'drying'] %}
+                        Heating Wire Temperature
+                    {% else %}
+                        Overall Performance
+                    {% endif %}
+                    </h5>
+                    <canvas id="temperatureChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Other Metrics -->
+        <div class="chart-container mt-4" data-aos="fade-up">
+            <h5 class="text-center mb-3">Process-Specific Metrics</h5>
+            <canvas id="metricsChart"></canvas>
+        </div>
+    </section>
+    
+    <!-- Current Readings -->
+    <section class="mb-5" data-aos="fade-up">
+        <div class="section-title">
+            <h2>Current Readings</h2>
+        </div>
+        
+        <div class="row">
+            {% for metric in readings %}
+            <div class="col-md-3 col-sm-6 mb-4" data-aos="fade-up" data-aos-delay="{{ loop.index * 50 }}">
+                <div class="metric-card p-4">
+                    <h5 class="metric-title">{{ metric.name|replace('_', ' ')|capitalize }}</h5>
+                    <div class="metric-current">
+                        <span class="current-value">{{ metric.value }}</span>
+                        <span class="current-unit">{{ metric.unit }}</span>
+                    </div>
+                    <div class="metric-range mt-2">
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar {% if metric.value > metric.threshold.max or metric.value < metric.threshold.min %}bg-danger{% else %}bg-success{% endif %}" role="progressbar" style="width: {{ ((metric.value - metric.range.min) / (metric.range.max - metric.range.min)) * 100 }}%" aria-valuenow="{{ metric.value }}" aria-valuemin="{{ metric.range.min }}" aria-valuemax="{{ metric.range.max }}"></div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1">
+                            <small class="range-min">{{ metric.range.min }}</small>
+                            <small class="range-max">{{ metric.range.max }}</small>
+                        </div>
+                    </div>
+                    {% if metric.trend %}
+                    <div class="metric-trend mt-2">
+                        {% if metric.trend == 'up' %}
+                        <i class="fas fa-arrow-trend-up text-success me-1"></i>
+                        <small class="text-success">+{{ metric.trend_value }}% from average</small>
+                        {% elif metric.trend == 'down' %}
+                        <i class="fas fa-arrow-trend-down text-danger me-1"></i>
+                        <small class="text-danger">-{{ metric.trend_value }}% from average</small>
+                        {% else %}
+                        <i class="fas fa-minus text-muted me-1"></i>
+                        <small class="text-muted">Stable</small>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    
+    <!-- Maintenance History -->
+    <section class="mb-5" data-aos="fade-up">
+        <div class="section-title">
+            <h2>Maintenance History</h2>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-dark table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Technician</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Sample maintenance history - would be replaced with actual data -->
+                    <tr>
+                        <td>May 12, 2025</td>
+                        <td>Routine</td>
+                        <td>John Smith</td>
+                        <td>Regular calibration and cleaning</td>
+                        <td><span class="badge bg-success">Completed</span></td>
+                    </tr>
+                    <tr>
+                        <td>April 28, 2025</td>
+                        <td>Repair</td>
+                        <td>Sarah Johnson</td>
+                        <td>Motor replacement after overheating</td>
+                        <td><span class="badge bg-success">Completed</span></td>
+                    </tr>
+                    <tr>
+                        <td>April 15, 2025</td>
+                        <td>Emergency</td>
+                        <td>Robert Chen</td>
+                        <td>Emergency repair of control system</td>
+                        <td><span class="badge bg-success">Completed</td>
+                    </tr>
+                    <tr>
+                        <td>May 18, 2025</td>
+                        <td>Upgrade</td>
+                        <td>Alex Garcia</td>
+                        <td>Software and firmware update</td>
+                        <td><span class="badge bg-warning">Scheduled</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+      <!-- Predictive Maintenance -->
+    <section class="mb-5" data-aos="fade-up">
+        <div class="section-title">
+            <h2>AI Predicted Maintenance</h2>
+        </div>
+        
+        <div class="predictive-maintenance-card">
+            <div class="bg-gradient-primary">
+                <div class="glow-effect"></div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <div class="ai-icon pulse-effect me-3">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <h5 class="mb-0 text-white">Predictive Analytics</h5>
+                    </div>
+                    <div class="ai-badge">AI Powered</div>
+                </div>
+            </div>
+            
+            <div class="themed-card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="prediction-card">
+                            <div class="prediction-header">
+                                <div class="prediction-title">
+                                    <div class="prediction-icon-wrapper me-2">
+                                        <i class="fas fa-calendar-alt prediction-icon" style="color: #fff;"></i>
+                                    </div>
+                                    Next Predicted Maintenance
+                                </div>
+                            </div>
+                            <div class="prediction-content">
+                                <div class="prediction-value" id="nextMaintenanceDate">June 15, 2025</div>
+                                <div class="prediction-meta">Based on current performance metrics</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="prediction-card">
+                            <div class="prediction-header">
+                                <div class="prediction-title">
+                                    <div class="prediction-icon-wrapper me-2">
+                                        <i class="fas fa-tools prediction-icon" style="color: #fff;"></i>
+                                    </div>
+                                    Maintenance Type
+                                </div>
+                            </div>
+                            <div class="prediction-content">
+                                <div class="prediction-value" id="maintenanceType">Preventive</div>
+                                <div class="prediction-meta">Parts inspection and calibration</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="prediction-card">
+                            <div class="prediction-header">
+                                <div class="prediction-title">
+                                    <div class="prediction-icon-wrapper me-2">
+                                        <i class="fas fa-clock prediction-icon" style="color: #fff;"></i>
+                                    </div>
+                                    Estimated Downtime
+                                </div>
+                            </div>
+                            <div class="prediction-content">
+                                <div class="prediction-value">4 hours</div>
+                                <div class="prediction-meta">Based on maintenance type</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mb-4">
+                    <div class="col-lg-6 mb-4">
+                        <h6 class="mb-3">Component Health</h6>
+                        <div class="health-item">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="component-name">Motor</span>
+                                <span class="component-value" id="motorHealth">92%</span>
+                            </div>
+                            <div class="component-progress">
+                                <div class="progress-bar" role="progressbar" style="width: 92%" aria-valuenow="92" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="health-item">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="component-name">Heating Elements</span>
+                                <span class="component-value" id="heatingHealth">87%</span>
+                            </div>
+                            <div class="component-progress">
+                                <div class="progress-bar" role="progressbar" style="width: 87%" aria-valuenow="87" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="health-item">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="component-name">Control Systems</span>
+                                <span class="component-value" id="controlHealth">95%</span>
+                            </div>
+                            <div class="component-progress">
+                                <div class="progress-bar" role="progressbar" style="width: 95%" aria-valuenow="95" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="health-item">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="component-name">Mechanical Parts</span>
+                                <span class="component-value" id="mechanicalHealth">78%</span>
+                            </div>
+                            <div class="component-progress">
+                                <div class="progress-bar warning" role="progressbar" style="width: 78%" aria-valuenow="78" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                    </div>
+                      <div class="col-lg-6 mb-4">
+                        <div class="schedule-header mb-3">
+                            <h6 class="mb-0">Maintenance Schedule</h6>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="maintenance-table table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Components</th>
+                                        <th>Duration</th>
+                                        <th>Priority</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="maintenanceSchedule">
+                                    <tr>
+                                        <td>June 19, 2025</td>
+                                        <td><span class="maintenance-type preventive">Preventive</span></td>
+                                        <td>Fan Motor, Trays</td>
+                                        <td>4 hours</td>
+                                        <td><span class="priority-badge medium">Medium</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>August 3, 2025</td>
+                                        <td><span class="maintenance-type routine">Routine</span></td>
+                                        <td>Airflow System</td>
+                                        <td>6 hours</td>
+                                        <td><span class="priority-badge low">Low</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>October 2, 2025</td>
+                                        <td><span class="maintenance-type overhaul">Overhaul</span></td>
+                                        <td>Full System Check</td>
+                                        <td>12 hours</td>
+                                        <td><span class="priority-badge high">High</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="info-panel mt-2">
+                    <div class="info-icon">
+                        <i class="fas fa-info-circle"></i>
+                    </div>
+                    <div class="info-content">
+                        Maintenance predictions are based on machine learning models analyzing historical performance data, component wear patterns, and environmental factors.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+      <!-- Technical Specifications -->
+    <section class="mb-5" data-aos="fade-up">
+        <div class="section-title">
+            <h2>Technical Specifications</h2>
+        </div>
+          <div class="row">
+            <div class="col-12">
+                <div class="specs-card">
+                    <div class="specs-header">
+                        <h5><i class="fas fa-cogs"></i> General Specifications</h5>
+                    </div>
+                    <div class="specs-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <ul class="specs-list">
+                                    {% if machine.specs %}
+                                    <li class="specs-item">
+                                        <span class="specs-label">Model</span>
+                                        <span class="specs-value">{{ machine.specs.model }}</span>
+                                    </li>
+                                    <li class="specs-item">
+                                        <span class="specs-label">Manufacturer</span>
+                                        <span class="specs-value">{{ machine.specs.manufacturer }}</span>
+                                    </li>
+                                    <li class="specs-item">
+                                        <span class="specs-label">Dimensions</span>
+                                        <span class="specs-value">{{ machine.specs.dimensions }}</span>
+                                    </li>
+                                    <li class="specs-item">
+                                        <span class="specs-label">Voltage</span>
+                                        <span class="specs-value">{{ machine.specs.voltage }}</span>
+                                    </li>
+                                    <li class="specs-item">
+                                        <span class="specs-label">Efficiency</span>
+                                        <span class="specs-value">{{ machine.specs.efficiency }}</span>
+                                    </li>
+                                    {% else %}
+                                    <li class="specs-item">
+                                        <span class="specs-label">No specifications available</span>
+                                    </li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <ul class="specs-list">
+                                {% if machine.specs %}
+                                    {% if machine.process_id == 'withering' %}
+                                        <li class="specs-item">
+                                            <span class="specs-label">Heating Type</span>
+                                            <span class="specs-value">{{ machine.specs.heating_type }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Power Set</span>
+                                            <span class="specs-value">{{ machine.specs.power_set }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Fan Motor Power</span>
+                                            <span class="specs-value">{{ machine.specs.fan_motor_power }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Fan Motor Speed</span>
+                                            <span class="specs-value">{{ machine.specs.fan_motor_speed }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Tray Size</span>
+                                            <span class="specs-value">{{ machine.specs.tray_size }}</span>
+                                        </li>
+                                    {% elif machine.process_id == 'rolling' %}
+                                        <li class="specs-item">
+                                            <span class="specs-label">Disc Diameter</span>
+                                            <span class="specs-value">{{ machine.specs.disc_diameter }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Barrel Diameter</span>
+                                            <span class="specs-value">{{ machine.specs.barrel_diameter }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Motor Power</span>
+                                            <span class="specs-value">{{ machine.specs.motor_power }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Barrel Speed</span>
+                                            <span class="specs-value">{{ machine.specs.barrel_speed }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Maximum Capacity</span>
+                                            <span class="specs-value">{{ machine.specs.max_capacity }}</span>
+                                        </li>
+                                    {% elif machine.process_id == 'fermentation' %}
+                                        <li class="specs-item">
+                                            <span class="specs-label">Heating Mode</span>
+                                            <span class="specs-value">{{ machine.specs.heating_mode }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Heating Power</span>
+                                            <span class="specs-value">{{ machine.specs.heating_power }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Tray Size</span>
+                                            <span class="specs-value">{{ machine.specs.tray_size }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Tray Quantity</span>
+                                            <span class="specs-value">{{ machine.specs.tray_quantity }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Tray Layers</span>
+                                            <span class="specs-value">{{ machine.specs.tray_layers }}</span>
+                                        </li>
+                                    {% elif machine.process_id == 'drying' %}
+                                        <li class="specs-item">
+                                            <span class="specs-label">Heating Element</span>
+                                            <span class="specs-value">{{ machine.specs.heating_element }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Total Power</span>
+                                            <span class="specs-value">{{ machine.specs.total_power }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Rotary Speed</span>
+                                            <span class="specs-value">{{ machine.specs.rotary_speed }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Drying Area</span>
+                                            <span class="specs-value">{{ machine.specs.drying_area }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Drying Layers</span>
+                                            <span class="specs-value">{{ machine.specs.drying_layers }}</span>
+                                        </li>
+                                    {% elif machine.process_id == 'sorting' %}
+                                        <li class="specs-item">
+                                            <span class="specs-label">Inner Barrel Diameter</span>
+                                            <span class="specs-value">{{ machine.specs.inner_barrel_diameter }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Inner Barrel Length</span>
+                                            <span class="specs-value">{{ machine.specs.inner_barrel_length }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Heating Power</span>
+                                            <span class="specs-value">{{ machine.specs.heating_power }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Barrel Speed</span>
+                                            <span class="specs-value">{{ machine.specs.barrel_speed }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Sieve Sizes</span>
+                                            <span class="specs-value">{{ machine.specs.sieve_sizes }}</span>
+                                        </li>
+                                    {% elif machine.process_id == 'packing' %}
+                                        <li class="specs-item">
+                                            <span class="specs-label">Bag Width</span>
+                                            <span class="specs-value">{{ machine.specs.bag_width }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Bag Length Range</span>
+                                            <span class="specs-value">{{ machine.specs.bag_length_range }}</span>
+                                        </li>
+                                        <li class="specs-item">
+                                            <span class="specs-label">Endometrial Bag Width</span>
+                                            <span class="specs-value">{{ machine.specs.endometrial_bag_width }}</span>
+                                        </li>
+                                    {% endif %}
+                                {% else %}
+                                <li class="specs-item">
+                                    <span class="specs-label">No specifications available</span>
+                                </li>
+                                {% endif %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Machine Image Card -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="machine-image-card">
+                    <div class="machine-image-header">
+                        <h5><i class="fas fa-image"></i> Machine Image</h5>
+                    </div>
+                    <div class="machine-image-body text-center">
+                        {% if machine.image_url %}
+                        <img src="{{ url_for('static', filename=machine.image_url) }}" alt="{{ machine.name }}" class="img-fluid machine-detail-image">
+                        {% else %}
+                        <div class="no-image-alert">
+                            <i class="fas fa-image-slash me-2"></i> No image available for this machine
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get initial chart data from the backend
+        let chartLabels = {{ machine.chart_data.labels | tojson | safe }} || [];
+        let voltageData = {{ machine.chart_data.voltage | tojson | safe }} || [];
+        let temperatureData = {{ machine.chart_data.heating_wire_temperature | tojson | safe }} || [];
+        const machineType = "{{ machine.process_id }}";
+        
+        const CHART_DATA_POINTS = 24; // Use more data points to fill the chart
+        
+        // Fix missing data arrays if needed
+        if (!chartLabels.length) {
+            const now = new Date();
+            // Create timestamps at 5-sec intervals going back from now
+            for (let i = CHART_DATA_POINTS - 1; i >= 0; i--) {
+                const time = new Date(now - (i * 5000));
+                chartLabels.push(time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+            }
+        }
+        if (!voltageData.length) {
+            // Default voltage range based on machine type
+            const baseVoltage = machineType === 'fermentation' || machineType === 'packing' ? 220 : 380;
+            // Generate data for the full width of the chart
+            for (let i = 0; i < CHART_DATA_POINTS; i++) {
+                voltageData.push(baseVoltage + (Math.random() * 10 - 5));
+            }
+        }
+        if (!temperatureData.length && ['withering', 'fermentation', 'drying'].includes(machineType)) {
+            // Default temperature range based on machine type
+            let baseTemp = machineType === 'withering' ? 80 : 
+                          machineType === 'fermentation' ? 60 : 120;
+            // Generate data for the full width of the chart
+            for (let i = 0; i < CHART_DATA_POINTS; i++) {
+                temperatureData.push(baseTemp + (Math.random() * 6 - 3));
+            }
+        }
+        
+        // Common chart configuration
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 0 // Disable animations completely for real-time updates
+            },
+            transitions: {
+                active: {
+                    animation: {
+                        duration: 0 // Disable animations during updates
+                    }
+                }
+            },
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: '#E5E7EB',
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                    titleColor: '#E5E7EB',
+                    bodyColor: '#E5E7EB',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    borderWidth: 1,
+                    padding: 12,
+                    displayColors: true,
+                    usePointStyle: true
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#9CA3AF'
+                    }
+                },
+                y: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#9CA3AF'
+                    },
+                    beginAtZero: false
+                }
+            }
+        };
+          // Define the safe ranges for each machine type
+        const safeRanges = {
+            voltage: {
+                min: machineType === 'fermentation' || machineType === 'packing' ? 215 : 375,
+                max: machineType === 'fermentation' || machineType === 'packing' ? 225 : 385
+            },
+            temperature: {
+                withering: { min: 77, max: 83 },
+                fermentation: { min: 58, max: 62 },
+                drying: { min: 115, max: 125 }
+            }
+        };
+        
+        // 1. Initialize voltage chart
+        const voltageCtx = document.getElementById('voltageChart').getContext('2d');
+        const voltageChart = new Chart(voltageCtx, {
+            type: 'line',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: 'Voltage (V)',
+                    data: voltageData,
+                    borderColor: '#22D3EE',
+                    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 2,
+                    pointRadius: 3
+                }]
+            },
+            options: {
+                ...commonOptions,
+                scales: {
+                    ...commonOptions.scales,
+                    y: {
+                        ...commonOptions.scales.y,
+                        title: {
+                            display: true,
+                            text: 'Voltage (V)',
+                            color: '#9CA3AF'
+                        },
+                        min: safeRanges.voltage.min - 10,
+                        max: safeRanges.voltage.max + 10,
+                    }
+                },
+                plugins: {
+                    ...commonOptions.plugins,
+                    annotation: {
+                        annotations: {
+                            box1: {
+                                type: 'box',
+                                yMin: safeRanges.voltage.min,
+                                yMax: safeRanges.voltage.max,
+                                backgroundColor: 'rgba(46, 204, 113, 0.2)',
+                                borderColor: 'rgba(46, 204, 113, 0.8)',
+                                borderWidth: 1,
+                                label: {
+                                    content: 'Safe Range',
+                                    display: true,
+                                    position: 'start'
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // 2. Initialize temperature chart (or performance chart for machines without heating wire)
+        const tempCtx = document.getElementById('temperatureChart').getContext('2d');
+          let temperatureChart;
+        
+        if (['withering', 'fermentation', 'drying'].includes(machineType)) {
+            // Machines with heating wire - show temperature
+            const tempMin = safeRanges.temperature[machineType].min - 5;
+            const tempMax = safeRanges.temperature[machineType].max + 5;
+            
+            temperatureChart = new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Heating Wire Temperature (°C)',
+                        data: temperatureData,
+                        borderColor: '#EF4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            title: {
+                                display: true,
+                                text: 'Temperature (°C)',
+                                color: '#9CA3AF'
+                            },
+                            min: tempMin,
+                            max: tempMax
+                        }
+                    },
+                    plugins: {
+                        ...commonOptions.plugins,
+                        annotation: {
+                            annotations: {
+                                box1: {
+                                    type: 'box',
+                                    yMin: safeRanges.temperature[machineType].min,
+                                    yMax: safeRanges.temperature[machineType].max,
+                                    backgroundColor: 'rgba(46, 204, 113, 0.2)',
+                                    borderColor: 'rgba(46, 204, 113, 0.8)',
+                                    borderWidth: 1,
+                                    label: {
+                                        content: 'Safe Range',
+                                        display: true,
+                                        position: 'start'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        } else {
+            // For machines without heating wire, generate performance data for the full chart width
+            let performanceData = [];
+            let performanceLabel = 'Performance';
+            let basePerformance, performanceVariation;
+            
+            if (machineType === 'withering') {
+                performanceLabel = 'Leaf Moisture Reduction (%)';
+                basePerformance = 93;
+                performanceVariation = 3;
+            } else if (machineType === 'rolling') {
+                performanceLabel = 'Motor Efficiency (%)';
+                basePerformance = 90;
+                performanceVariation = 5;
+            } else if (machineType === 'fermentation') {
+                performanceLabel = 'Oxidation Rate (%)';
+                basePerformance = 91;
+                performanceVariation = 4;
+            } else if (machineType === 'drying') {
+                performanceLabel = 'Drying Efficiency (%)';
+                basePerformance = 88;
+                performanceVariation = 5;
+            } else if (machineType === 'sorting') {
+                performanceLabel = 'Sorting Accuracy (%)';
+                basePerformance = 95;
+                performanceVariation = 4;
+            } else if (machineType === 'packing') {
+                performanceLabel = 'Packing Efficiency (%)';
+                basePerformance = 96;
+                performanceVariation = 3;
+            }
+            
+            // Generate data for the full chart width
+            for (let i = 0; i < CHART_DATA_POINTS; i++) {
+                performanceData.push(basePerformance + (Math.random() * performanceVariation * 2 - performanceVariation));
+            }
+            
+            const performanceChart = new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: performanceLabel,
+                        data: performanceData,
+                        borderColor: '#10B981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            title: {
+                                display: true,
+                                text: performanceLabel,
+                                color: '#9CA3AF'
+                            },
+                            // Set appropriate min/max for performance metrics
+                            min: basePerformance - performanceVariation * 1.5,
+                            max: basePerformance + performanceVariation * 1.5
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Define process-specific metrics y-axis ranges
+        const metricsRanges = {
+            withering: {
+                temperature: { min: 25, max: 32 },
+                humidity: { min: 70, max: 90 }
+            },
+            rolling: {
+                temperature: { min: 32, max: 44 },
+                pressure: { min: 2400, max: 2800 }
+            },
+            fermentation: {
+                temperature: { min: 25, max: 33 },
+                humidity: { min: 88, max: 96 }
+            },
+            drying: {
+                temperature: { min: 75, max: 95 },
+                moisture: { min: 2, max: 7 }
+            },
+            sorting: {
+                vibration: { min: 2.5, max: 3.5 },
+                feedRate: { min: 440, max: 520 }
+            },
+            packing: {
+                speed: { min: 7400, max: 8200 },
+                temperature: { min: 170, max: 185 }
+            }
+        };
+        
+        // 3. Initialize process-specific metrics chart
+        const metricsCtx = document.getElementById('metricsChart').getContext('2d');
+        
+        // Define process-specific metrics
+        let processMetrics = {
+            labels: chartLabels,
+            datasets: []
+        };
+        
+        // Helper function to generate appropriate randomized data for the full chart width
+        function generateMetricData(baseValue, variation, count) {
+            const data = [];
+            for (let i = 0; i < count; i++) {
+                data.push(baseValue + (Math.random() * variation * 2 - variation));
+            }
+            return data;
+        }
+        
+        // Add different metrics based on machine type
+        if (machineType === 'withering') {
+            processMetrics.datasets = [
+                {
+                    label: 'Ambient Temperature (°C)',
+                    data: generateMetricData(28, 2, CHART_DATA_POINTS), // 26-30°C range
+                    borderColor: '#4F46E5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Humidity (%)',
+                    data: generateMetricData(80, 5, CHART_DATA_POINTS), // 75-85% range
+                    borderColor: '#8B5CF6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y1'
+                }
+            ];
+        } else if (machineType === 'rolling') {
+            processMetrics.datasets = [
+                {
+                    label: 'Roller Temperature (°C)',
+                    data: generateMetricData(38, 3, CHART_DATA_POINTS), // 35-41°C range
+                    borderColor: '#4F46E5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Pressure (N)',
+                    data: generateMetricData(2600, 100, CHART_DATA_POINTS), // 2500-2700N range
+                    borderColor: '#EF4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y1'
+                }
+            ];
+        } else if (machineType === 'fermentation') {
+            processMetrics.datasets = [
+                {
+                    label: 'Chamber Temperature (°C)',
+                    data: generateMetricData(29, 2, CHART_DATA_POINTS), // 27-31°C range
+                    borderColor: '#4F46E5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Chamber Humidity (%)',
+                    data: generateMetricData(92, 2, CHART_DATA_POINTS), // 90-94% range
+                    borderColor: '#8B5CF6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y1'
+                }
+            ];
+        } else if (machineType === 'drying') {
+            processMetrics.datasets = [
+                {
+                    label: 'Air Temperature (°C)',
+                    data: generateMetricData(85, 5, CHART_DATA_POINTS), // 80-90°C range
+                    borderColor: '#4F46E5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Moisture Content (%)',
+                    data: generateMetricData(4.5, 1.5, CHART_DATA_POINTS), // 3-6% range
+                    borderColor: '#22D3EE',
+                    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y1'
+                }
+            ];
+        } else if (machineType === 'sorting') {
+            processMetrics.datasets = [
+                {
+                    label: 'Vibration Amplitude (mm)',
+                    data: generateMetricData(3.0, 0.3, CHART_DATA_POINTS), // 2.7-3.3mm range
+                    borderColor: '#4F46E5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Feed Rate (kg/h)',
+                    data: generateMetricData(485, 15, CHART_DATA_POINTS), // 470-500kg/h range
+                    borderColor: '#F59E0B',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y1'
+                }
+            ];
+        } else if (machineType === 'packing') {
+            processMetrics.datasets = [
+                {
+                    label: 'Production Speed (bags/h)',
+                    data: generateMetricData(7800, 200, CHART_DATA_POINTS), // 7600-8000 bags/h range
+                    borderColor: '#4F46E5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Sealing Temperature (°C)',
+                    data: generateMetricData(177, 3, CHART_DATA_POINTS), // 174-180°C range
+                    borderColor: '#EF4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y1'
+                }
+            ];
+        }
+        
+        const metricsChart = new Chart(metricsCtx, {
+            type: 'line',
+            data: processMetrics,
+            options: {
+                ...commonOptions,
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#9CA3AF'
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: processMetrics.datasets[0].label.split(' (')[0],
+                            color: '#9CA3AF'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#9CA3AF'
+                        },
+                        beginAtZero: false,
+                        // Add custom min and max based on machine type
+                        min: machineType === 'withering' ? metricsRanges.withering.temperature.min :
+                             machineType === 'rolling' ? metricsRanges.rolling.temperature.min :
+                             machineType === 'fermentation' ? metricsRanges.fermentation.temperature.min :
+                             machineType === 'drying' ? metricsRanges.drying.temperature.min :
+                             machineType === 'sorting' ? metricsRanges.sorting.vibration.min :
+                             machineType === 'packing' ? metricsRanges.packing.speed.min : undefined,
+                        max: machineType === 'withering' ? metricsRanges.withering.temperature.max :
+                             machineType === 'rolling' ? metricsRanges.rolling.temperature.max :
+                             machineType === 'fermentation' ? metricsRanges.fermentation.temperature.max :
+                             machineType === 'drying' ? metricsRanges.drying.temperature.max :
+                             machineType === 'sorting' ? metricsRanges.sorting.vibration.max :
+                             machineType === 'packing' ? metricsRanges.packing.speed.max : undefined
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: processMetrics.datasets[1].label.split(' (')[0],
+                            color: '#9CA3AF'
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#9CA3AF'
+                        },
+                        beginAtZero: false,
+                        // Add custom min and max based on machine type
+                        min: machineType === 'withering' ? metricsRanges.withering.humidity.min :
+                             machineType === 'rolling' ? metricsRanges.rolling.pressure.min :
+                             machineType === 'fermentation' ? metricsRanges.fermentation.humidity.min :
+                             machineType === 'drying' ? metricsRanges.drying.moisture.min :
+                             machineType === 'sorting' ? metricsRanges.sorting.feedRate.min :
+                             machineType === 'packing' ? metricsRanges.packing.temperature.min : undefined,
+                        max: machineType === 'withering' ? metricsRanges.withering.humidity.max :
+                             machineType === 'rolling' ? metricsRanges.rolling.pressure.max :
+                             machineType === 'fermentation' ? metricsRanges.fermentation.humidity.max :
+                             machineType === 'drying' ? metricsRanges.drying.moisture.max :
+                             machineType === 'sorting' ? metricsRanges.sorting.feedRate.max :
+                             machineType === 'packing' ? metricsRanges.packing.temperature.max : undefined
+                    }
+                },
+                plugins: {
+                    ...commonOptions.plugins
+                }
+            }
+        });
+          // Time range selector
+        window.updateChartTimeRange = function(range) {
+            // Toggle active class
+            document.querySelectorAll('.time-range').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // In a real app, this would fetch data for the selected time range
+            // For this demo, we'll just show a notification
+            document.body.insertAdjacentHTML('beforeend', `
+                <div class="toast-container position-fixed bottom-0 end-0 p-3">
+                    <div class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="toast-header">
+                            <strong class="me-auto">Time Range Updated</strong>
+                            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                        <div class="toast-body">
+                            Chart updated to show ${range} of data.
+                        </div>
+                    </div>
+                </div>
+            `);
+            
+            const toast = document.querySelector('.toast');
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            // In a real implementation, you would update the chart with new data here
+        };
+        
+        // Function to simulate fetching real-time data
+        function fetchRealTimeData() {
+            // Generate new timestamp
+            const now = new Date();
+            const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+            
+            // Remove oldest data point and add new one
+            chartLabels.shift();
+            chartLabels.push(timeString);
+            
+            // Generate new voltage data based on machine type
+            const baseVoltage = machineType === 'fermentation' || machineType === 'packing' ? 220 : 380;
+            const newVoltage = baseVoltage + (Math.random() * 10 - 5); // Random voltage within ±5V of base
+            voltageData.shift();
+            voltageData.push(newVoltage);
+            voltageChart.update('none'); // Use 'none' mode to prevent animations
+            
+            // Update temperature or performance chart
+            if (['withering', 'fermentation', 'drying'].includes(machineType)) {
+                let baseTemp;
+                if (machineType === 'withering') {
+                    baseTemp = 80;
+                } else if (machineType === 'fermentation') {
+                    baseTemp = 60;
+                } else { // drying
+                    baseTemp = 120;
+                }
+                
+                // Random temperature within ±3°C of base
+                const newTemp = baseTemp + (Math.random() * 6 - 3);
+                temperatureData.shift();
+                temperatureData.push(newTemp);
+                temperatureChart.update('none');
+            } else {
+                // For performance chart (machines without heating wire)
+                let basePerformance, performanceVariation;
+                
+                if (machineType === 'withering') {
+                    basePerformance = 93;
+                    performanceVariation = 3;
+                } else if (machineType === 'rolling') {
+                    basePerformance = 90;
+                    performanceVariation = 5;
+                } else if (machineType === 'fermentation') {
+                    basePerformance = 91;
+                    performanceVariation = 4;
+                } else if (machineType === 'drying') {
+                    basePerformance = 88;
+                    performanceVariation = 5;
+                } else if (machineType === 'sorting') {
+                    basePerformance = 95;
+                    performanceVariation = 4;
+                } else if (machineType === 'packing') {
+                    basePerformance = 96;
+                    performanceVariation = 3;
+                }
+                
+                const newPerformance = basePerformance + (Math.random() * performanceVariation * 2 - performanceVariation);
+                // Access the correct chart variable
+                const perfChart = Chart.getChart(tempCtx);
+                if (perfChart) {
+                    // Remove first data point and add new one
+                    perfChart.data.datasets[0].data.shift();
+                    perfChart.data.datasets[0].data.push(newPerformance);
+                    perfChart.update('none');
+                }
+            }
+            
+            // Update process-specific metrics
+            if (machineType === 'withering') {
+                // Update ambient temperature
+                const newAmbTemp = 28 + (Math.random() * 4 - 2); // 26-30°C range
+                metricsChart.data.datasets[0].data.shift();
+                metricsChart.data.datasets[0].data.push(newAmbTemp);
+                
+                // Update humidity
+                const newHumidity = 80 + (Math.random() * 10 - 5); // 75-85% range
+                metricsChart.data.datasets[1].data.shift();
+                metricsChart.data.datasets[1].data.push(newHumidity);
+            } else if (machineType === 'rolling') {
+                // Update roller temperature
+                const newRollerTemp = 38 + (Math.random() * 6 - 3); // 35-41°C range
+                metricsChart.data.datasets[0].data.shift();
+                metricsChart.data.datasets[0].data.push(newRollerTemp);
+                
+                // Update pressure
+                const newPressure = 2600 + (Math.random() * 200 - 100); // 2500-2700N range
+                metricsChart.data.datasets[1].data.shift();
+                metricsChart.data.datasets[1].data.push(newPressure);
+            } else if (machineType === 'fermentation') {
+                // Update chamber temperature
+                const newChamberTemp = 29 + (Math.random() * 4 - 2); // 27-31°C range
+                metricsChart.data.datasets[0].data.shift();
+                metricsChart.data.datasets[0].data.push(newChamberTemp);
+                
+                // Update chamber humidity
+                const newHumidity = 92 + (Math.random() * 4 - 2); // 90-94% range
+                metricsChart.data.datasets[1].data.shift();
+                metricsChart.data.datasets[1].data.push(newHumidity);
+            } else if (machineType === 'drying') {
+                // Update air temperature
+                const newAirTemp = 85 + (Math.random() * 10 - 5); // 80-90°C range
+                metricsChart.data.datasets[0].data.shift();
+                metricsChart.data.datasets[0].data.push(newAirTemp);
+                
+                // Update moisture content
+                const newMoisture = 4.5 + (Math.random() * 3 - 1.5); // 3-6% range
+                metricsChart.data.datasets[1].data.shift();
+                metricsChart.data.datasets[1].data.push(newMoisture);
+            } else if (machineType === 'sorting') {
+                // Update vibration amplitude
+                const newVibration = 3.0 + (Math.random() * 0.6 - 0.3); // 2.7-3.3mm range
+                metricsChart.data.datasets[0].data.shift();
+                metricsChart.data.datasets[0].data.push(newVibration);
+                
+                // Update feed rate
+                const newFeedRate = 485 + (Math.random() * 30 - 15); // 470-500kg/h range
+                metricsChart.data.datasets[1].data.shift();
+                metricsChart.data.datasets[1].data.push(newFeedRate);
+            } else if (machineType === 'packing') {
+                // Update production speed
+                const newSpeed = 7800 + (Math.random() * 400 - 200); // 7600-8000 bags/h range
+                metricsChart.data.datasets[0].data.shift();
+                metricsChart.data.datasets[0].data.push(newSpeed);
+                
+                // Update sealing temperature
+                const newSealTemp = 177 + (Math.random() * 6 - 3); // 174-180°C range
+                metricsChart.data.datasets[1].data.shift();
+                metricsChart.data.datasets[1].data.push(newSealTemp);
+            }
+            
+            metricsChart.update('none'); // Use 'none' mode to prevent animations
+            
+            // Also update current readings display
+            updateCurrentReadings();
+        }
+        
+        // Function to update current readings displayed
+        function updateCurrentReadings() {
+            const readingsElements = document.querySelectorAll('.metric-card .current-value');
+            if (readingsElements.length) {
+                // Update with random variations for demo purposes
+                readingsElements.forEach(element => {
+                    const currentValue = parseFloat(element.textContent);
+                    const variation = currentValue * 0.05; // 5% variation
+                    const newValue = currentValue + (Math.random() * variation * 2 - variation);
+                    element.textContent = newValue.toFixed(1);
+                    
+                    // Update progress bar
+                    const progressBar = element.closest('.metric-card').querySelector('.progress-bar');
+                    if (progressBar) {
+                        const min = parseFloat(element.closest('.metric-card').querySelector('.range-min').textContent);
+                        const max = parseFloat(element.closest('.metric-card').querySelector('.range-max').textContent);
+                        const percentage = ((newValue - min) / (max - min)) * 100;
+                        progressBar.style.width = `${percentage}%`;
+                        
+                        // Update color based on thresholds (simplified for demo)
+                        if (newValue > max * 0.95 || newValue < min * 1.05) {
+                            progressBar.classList.remove('bg-success');
+                            progressBar.classList.add('bg-danger');
+                        } else {
+                            progressBar.classList.remove('bg-danger');
+                            progressBar.classList.add('bg-success');
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Start real-time updates
+        const updateInterval = setInterval(fetchRealTimeData, 1000); // Update every second
+        
+        // Clean up interval when leaving the page
+        window.addEventListener('beforeunload', function() {
+            clearInterval(updateInterval);
+        });
+        
+        // Set up machine-specific predictive maintenance data
+        function setupPredictiveMaintenance() {
+            const currentDate = new Date();
+            let maintenanceDate, maintenanceType, maintenanceDescription;
+            let motorHealth, heatingHealth, controlHealth, mechanicalHealth;
+            
+            // Customize based on machine type
+            if (machineType === 'withering') {
+                maintenanceDate = new Date(currentDate);
+                maintenanceDate.setDate(currentDate.getDate() + 32); // About a month away
+                maintenanceType = 'Preventive';
+                maintenanceDescription = 'Fan motor inspection and tray cleaning';
+                motorHealth = 85;
+                heatingHealth = 92;
+                controlHealth = 96;
+                mechanicalHealth = 89;
+            } else if (machineType === 'rolling') {
+                maintenanceDate = new Date(currentDate);
+                maintenanceDate.setDate(currentDate.getDate() + 21); // About three weeks away
+                maintenanceType = 'Routine';
+                maintenanceDescription = 'Roller pressure calibration';
+                motorHealth = 92;
+                heatingHealth = 96;
+                controlHealth = 94;
+                mechanicalHealth = 78;
+            } else if (machineType === 'fermentation') {
+                maintenanceDate = new Date(currentDate);
+                maintenanceDate.setDate(currentDate.getDate() + 45); // About 1.5 months away
+                maintenanceType = 'Preventive';
+                maintenanceDescription = 'Humidity control system check';
+                motorHealth = 96;
+                heatingHealth = 87;
+                controlHealth = 92;
+                mechanicalHealth = 94;
+            } else if (machineType === 'drying') {
+                maintenanceDate = new Date(currentDate);
+                maintenanceDate.setDate(currentDate.getDate() + 14); // About 2 weeks away
+                maintenanceType = 'Critical';
+                maintenanceDescription = 'Heating elements replacement';
+                motorHealth = 90;
+                heatingHealth = 68;
+                controlHealth = 95;
+                mechanicalHealth = 82;
+            } else if (machineType === 'sorting') {
+                maintenanceDate = new Date(currentDate);
+                maintenanceDate.setDate(currentDate.getDate() + 28); // About 4 weeks away
+                maintenanceType = 'Routine';
+                maintenanceDescription = 'Sieve cleaning and calibration';
+                motorHealth = 93;
+                heatingHealth = 97;
+                controlHealth = 91;
+                mechanicalHealth = 84;
+            } else if (machineType === 'packing') {
+                maintenanceDate = new Date(currentDate);
+                maintenanceDate.setDate(currentDate.getDate() + 60); // About 2 months away
+                maintenanceType = 'Preventive';
+                maintenanceDescription = 'Sealing mechanism inspection';
+                motorHealth = 94;
+                heatingHealth = 91;
+                controlHealth = 97;
+                mechanicalHealth = 88;
+            }
+            
+            // Format the maintenance date
+            const maintenanceDateString = maintenanceDate.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            
+            // Update the DOM elements
+            document.getElementById('nextMaintenanceDate').textContent = maintenanceDateString;
+            document.getElementById('maintenanceType').textContent = maintenanceType;
+            
+            // Update component health indicators
+            updateComponentHealth('motorHealth', motorHealth);
+            updateComponentHealth('heatingHealth', heatingHealth);
+            updateComponentHealth('controlHealth', controlHealth);
+            updateComponentHealth('mechanicalHealth', mechanicalHealth);
+            
+            // Generate machine-specific maintenance schedule
+            generateMaintenanceSchedule(currentDate, machineType);
+        }
+        
+        // Helper function to update component health display
+        function updateComponentHealth(elementId, healthValue) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            
+            element.textContent = `${healthValue}%`;
+            
+            const progressBar = element.closest('.d-flex').nextElementSibling.querySelector('.progress-bar');
+            if (progressBar) {
+                progressBar.style.width = `${healthValue}%`;
+                progressBar.setAttribute('aria-valuenow', healthValue);
+                
+                // Set color based on health value
+                progressBar.classList.remove('bg-success', 'bg-warning', 'bg-danger');
+                if (healthValue >= 90) {
+                    progressBar.classList.add('bg-success');
+                } else if (healthValue >= 75) {
+                    progressBar.classList.add('bg-warning');
+                } else {
+                    progressBar.classList.add('bg-danger');
+                }
+            }
+        }
+        
+        // Generate machine-specific maintenance schedule
+        function generateMaintenanceSchedule(currentDate, machineType) {
+            const scheduleTable = document.getElementById('maintenanceSchedule');
+            if (!scheduleTable) return;
+            
+            // Clear existing table rows
+            scheduleTable.innerHTML = '';
+            
+            // Generate machine-specific schedule
+            const schedule = [];
+            
+            // First maintenance (always the same as the predicted next maintenance)
+            const firstDate = new Date(currentDate);
+            firstDate.setDate(currentDate.getDate() + (machineType === 'drying' ? 14 : 
+                                                       machineType === 'rolling' ? 21 : 
+                                                       machineType === 'sorting' ? 28 : 
+                                                       machineType === 'withering' ? 32 : 
+                                                       machineType === 'fermentation' ? 45 : 60));
+            
+            // Second maintenance (routine check)
+            const secondDate = new Date(firstDate);
+            secondDate.setDate(firstDate.getDate() + 45);
+            
+            // Third maintenance (major overhaul)
+            const thirdDate = new Date(secondDate);
+            thirdDate.setDate(secondDate.getDate() + 60);
+            
+            // Generate schedule based on machine type
+            if (machineType === 'withering') {
+                schedule.push({
+                    date: firstDate,
+                    type: 'Preventive',
+                    components: 'Fan Motor, Trays',
+                    duration: '4 hours',
+                    priority: 'Medium'
+                });
+                schedule.push({
+                    date: secondDate,
+                    type: 'Routine',
+                    components: 'Airflow System',
+                    duration: '6 hours',
+                    priority: 'Low'
+                });
+                schedule.push({
+                    date: thirdDate,
+                    type: 'Overhaul',
+                    components: 'Full System Check',
+                    duration: '12 hours',
+                    priority: 'High'
+                });
+            } else if (machineType === 'rolling') {
+                schedule.push({
+                    date: firstDate,
+                    type: 'Routine',
+                    components: 'Roller Pressure System',
+                    duration: '4 hours',
+                    priority: 'Medium'
+                });
+                schedule.push({
+                    date: secondDate,
+                    type: 'Preventive',
+                    components: 'Bearing Replacement',
+                    duration: '8 hours',
+                    priority: 'Medium'
+                });
+                schedule.push({
+                    date: thirdDate,
+                    type: 'Overhaul',
+                    components: 'Motor, Drive System',
+                    duration: '16 hours',
+                    priority: 'High'
+                });
+            } else if (machineType === 'fermentation') {
+                schedule.push({
+                    date: firstDate,
+                    type: 'Preventive',
+                    components: 'Humidity Control',
+                    duration: '3 hours',
+                    priority: 'Medium'
+                });
+                schedule.push({
+                    date: secondDate,
+                    type: 'Routine',
+                    components: 'Temperature Sensors',
+                    duration: '5 hours',
+                    priority: 'Low'
+                });
+                schedule.push({
+                    date: thirdDate,
+                    type: 'Critical',
+                    components: 'Environmental Controls',
+                    duration: '10 hours',
+                    priority: 'High'
+                });
+            } else if (machineType === 'drying') {
+                schedule.push({
+                    date: firstDate,
+                    type: 'Critical',
+                    components: 'Heating Elements',
+                    duration: '6 hours',
+                    priority: 'High'
+                });
+                schedule.push({
+                    date: secondDate,
+                    type: 'Preventive',
+                    components: 'Rotation Mechanism',
+                    duration: '4 hours',
+                    priority: 'Medium'
+                });
+                schedule.push({
+                    date: thirdDate,
+                    type: 'Overhaul',
+                    components: 'Full Heating System',
+                    duration: '18 hours',
+                    priority: 'High'
+                });
+            } else if (machineType === 'sorting') {
+                schedule.push({
+                    date: firstDate,
+                    type: 'Routine',
+                    components: 'Sieves, Screens',
+                    duration: '3 hours',
+                    priority: 'Medium'
+                });
+                schedule.push({
+                    date: secondDate,
+                    type: 'Preventive',
+                    components: 'Vibration Mechanism',
+                    duration: '5 hours',
+                    priority: 'Low'
+                });
+                schedule.push({
+                    date: thirdDate,
+                    type: 'Overhaul',
+                    components: 'Feed System, Motors',
+                    duration: '12 hours',
+                    priority: 'High'
+                });
+            } else if (machineType === 'packing') {
+                schedule.push({
+                    date: firstDate,
+                    type: 'Preventive',
+                    components: 'Sealing Mechanism',
+                    duration: '4 hours',
+                    priority: 'Medium'
+                });
+                schedule.push({
+                    date: secondDate,
+                    type: 'Routine',
+                    components: 'Bag Feed System',
+                    duration: '6 hours',
+                    priority: 'Low'
+                });
+                schedule.push({
+                    date: thirdDate,
+                    type: 'Critical',
+                    components: 'Control System Update',
+                    duration: '10 hours',
+                    priority: 'High'
+                });
+            }
+            
+            // Populate the table
+            schedule.forEach(item => {
+                const formattedDate = item.date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                
+                let priorityClass;
+                switch(item.priority) {
+                    case 'Low':
+                        priorityClass = 'bg-info';
+                        break;
+                    case 'Medium':
+                        priorityClass = 'bg-warning';
+                        break;
+                    case 'High':
+                        priorityClass = 'bg-danger';
+                        break;
+                    default:
+                        priorityClass = 'bg-secondary';
+                }
+                
+                const row = `
+                <tr>
+                    <td>${formattedDate}</td>
+                    <td>${item.type}</td>
+                    <td>${item.components}</td>
+                    <td>${item.duration}</td>
+                    <td><span class="badge ${priorityClass}">${item.priority}</span></td>
+                </tr>
+                `;
+                
+                scheduleTable.innerHTML += row;
+            });
+        }
+        
+        // Initialize predictive maintenance
+        setupPredictiveMaintenance();
+    });
+</script>
+
+<style>
+    /* Styles for the predictive maintenance section */
+    .prediction-indicator {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: rgba(79, 70, 229, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .prediction-icon {
+        font-size: 1.2rem;
+        color: #4F46E5;
+    }
+    
+    .component-health .progress {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+</style>
+{% endblock %}

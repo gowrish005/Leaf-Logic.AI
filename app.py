@@ -1,0 +1,101 @@
+from flask import Flask
+from routes import register_routes
+from models import init_db, clean_database, initialize_models, generate_readings
+from controllers import get_process_data
+import threading
+import time
+from pymongo import MongoClient
+
+app = Flask(__name__, 
+            static_url_path='', 
+            static_folder='static',
+            template_folder='templates')
+
+# Load configuration
+app.config['SECRET_KEY'] = 'tea-processing-monitor-secret-key'
+app.config['MONGO_URI'] = 'mongodb://localhost:27017/tea_processing'
+
+# Initialize database
+init_db(app)
+
+# Background data generation thread
+def background_data_generation():
+    """Generate data in the background every 30 seconds"""
+    with app.app_context():
+        while True:
+            try:
+                # Create a fresh connection each time to avoid connection timeout issues
+                mongo_client = MongoClient(app.config['MONGO_URI'])
+                db = mongo_client.get_database()
+                
+                # Make db available to the generate_readings function
+                from flask import g
+                g.db = db
+                
+                # Generate new readings
+                generate_readings()
+                
+                # Close the connection after use
+                mongo_client.close()
+            except Exception as e:
+                print(f"Error in background data generation: {e}")
+            
+            # Sleep for 30 seconds before next cycle
+            time.sleep(30)
+
+# Add context processor to make processes data available to all templates
+@app.context_processor
+def inject_processes():
+    """Make processes data available to all templates"""    
+    try:
+        # Create a dedicated MongoDB connection for this context processor
+        mongo_client = MongoClient(app.config['MONGO_URI'])
+        db = mongo_client.get_database()
+        
+        # Make db available to the get_process_data function
+        from flask import g
+        g.db = db
+        
+        # Get the process data
+        try:
+            processes = get_process_data()
+            # Close the connection after use
+            mongo_client.close()
+            return {'processes': processes}
+        except Exception as e:
+            print(f"Error getting process data: {e}")
+            # Close the connection if error
+            mongo_client.close()
+            return {'processes': []}
+    except Exception as e:
+        # In case of error, return an empty list to prevent the app from crashing
+        print(f"Error in inject_processes: {e}")
+        return {'processes': []}
+
+# Register routes
+register_routes(app)
+
+if __name__ == '__main__':
+    # Clean and initialize database on startup
+    with app.app_context():
+        # Create a direct database connection for startup operations
+        mongo_client = MongoClient(app.config['MONGO_URI'])
+        db = mongo_client.get_database()
+        
+        # Make db available to the clean_database and other functions
+        from flask import g
+        g.db = db
+        
+        clean_database()
+        initialize_models()
+        generate_readings()  # Generate initial readings
+        
+        # Close the startup connection
+        mongo_client.close()
+    
+    # Start background data generation
+    bg_thread = threading.Thread(target=background_data_generation)
+    bg_thread.daemon = True  # Thread will exit when main thread exits
+    bg_thread.start()
+    
+    app.run(debug=True)
