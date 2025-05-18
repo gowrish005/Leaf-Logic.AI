@@ -4,19 +4,20 @@ from models import init_db, clean_database, initialize_models, generate_readings
 from controllers import get_process_data
 import threading
 import time
+import os
 from pymongo import MongoClient
+from config import Config
 
 app = Flask(__name__, 
             static_url_path='', 
             static_folder='static',
             template_folder='templates')
 
-# Toggle this to enable/disable test/console output
-app.testing = False
+# Load configuration from Config class
+app.config.from_object(Config)
 
-# Load configuration
-app.config['SECRET_KEY'] = 'tea-processing-monitor-secret-key'
-app.config['MONGO_URI'] = 'mongodb://localhost:27017/tea_processing'
+# Toggle this to enable/disable test/console output
+app.testing = Config.TESTING
 
 # Initialize database
 init_db(app)
@@ -86,26 +87,35 @@ def inject_processes():
 register_routes(app)
 
 if __name__ == '__main__':
-    # Clean and initialize database on startup
-    with app.app_context():
-        # Create a direct database connection for startup operations
-        mongo_client = MongoClient(app.config['MONGO_URI'])
-        db = mongo_client.get_database()
-        
-        # Make db available to the clean_database and other functions
-        from flask import g
-        g.db = db
-        
-        clean_database()
-        initialize_models()
-        generate_readings()  # Generate initial readings
-        
-        # Close the startup connection
-        mongo_client.close()
-    
-    # Start background data generation
+    # Clean and initialize database on startup if not skipped
+    if not app.config.get('SKIP_DB_INIT', False):
+        with app.app_context():
+            try:
+                # Create a direct database connection for startup operations
+                mongo_client = MongoClient(app.config['MONGO_URI'])
+                db = mongo_client.get_database()
+                
+                # Make db available to the clean_database and other functions
+                from flask import g
+                g.db = db
+                
+                clean_database()
+                initialize_models()
+                generate_readings()  # Generate initial readings
+                
+                # Close the startup connection
+                mongo_client.close()
+                print("Database initialized successfully")
+            except Exception as e:
+                print(f"Error initializing database: {e}")
+                print("Continuing without database initialization.")
+      # Start background data generation
     bg_thread = threading.Thread(target=background_data_generation)
     bg_thread.daemon = True  # Thread will exit when main thread exits
     bg_thread.start()
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Get port from environment variable or use default
+    port = int(os.environ.get('PORT', 5000))
+    
+    # Run the app
+    app.run(host='0.0.0.0', port=port, debug=app.config['DEBUG'])
