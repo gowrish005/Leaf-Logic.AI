@@ -107,13 +107,15 @@ def init_db(app):
 
 def get_db():
     """
-    Get the database connection from the flask global object
+    Get the database connection from the flask global object.
+    Will try to connect to the primary MongoDB first, and if that fails,
+    will fall back to a local MongoDB instance (except on Render.com).
     
     Returns:
         pymongo.database.Database: MongoDB database connection
         
     Raises:
-        RuntimeError: If database connection is not available
+        RuntimeError: If neither default nor local database connection is available
     """
     if not hasattr(g, 'db'):
         from flask import current_app, has_request_context
@@ -121,10 +123,60 @@ def get_db():
         # If we're in a request context but don't have a DB connection,
         # it might be a special route that didn't get the before_request hook
         if has_request_context():
-            # Create a new connection
-            mongo_client = MongoClient(current_app.config['MONGO_URI'])
-            g.mongo_client = mongo_client
-            g.db = mongo_client.get_database()
+            # First try the default MongoDB (cloud)
+            mongo_options = current_app.config.get('MONGO_OPTIONS', {})
+            
+            # If running on Render, add retries with exponential backoff
+            is_render = current_app.config.get('IS_RENDER', False)
+            max_retries = 3 if is_render else 1
+            retry_delay = 2  # Start with 2 seconds, will be doubled each retry
+            
+            primary_error = None
+            for attempt in range(max_retries):
+                try:
+                    # Try primary MongoDB connection
+                    mongo_client = MongoClient(current_app.config['MONGO_URI'], **mongo_options)
+                    mongo_client.admin.command('ping')  # Test connection
+                    
+                    g.mongo_client = mongo_client
+                    g.db = mongo_client.get_database()
+                    current_app.config['USING_LOCAL_DB'] = False
+                    
+                    if attempt > 0:  # Only log success after retries
+                        print(f"Connected to primary MongoDB database after {attempt+1} attempts")
+                    
+                    return g.db
+                
+                except Exception as e:
+                    primary_error = e
+                    if attempt < max_retries - 1:
+                        print(f"Connection attempt {attempt+1} failed: {e}. Retrying in {retry_delay}s...")
+                        import time
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        print(f"All {max_retries} connection attempts to primary database failed.")
+            
+            # Only attempt local fallback if NOT on Render.com
+            if not is_render:
+                print(f"Error connecting to primary database: {primary_error}")
+                print("Attempting to connect to local MongoDB fallback...")
+                
+                try:
+                    local_mongo_client = MongoClient(current_app.config['LOCAL_MONGO_URI'], **mongo_options)
+                    local_mongo_client.admin.command('ping')  # Test connection
+                    
+                    g.mongo_client = local_mongo_client
+                    g.db = local_mongo_client.get_database()
+                    current_app.config['USING_LOCAL_DB'] = True
+                    print("Connected to local MongoDB database as fallback")
+                    
+                except Exception as local_error:
+                    print(f"Error connecting to local database fallback: {local_error}")
+                    raise RuntimeError(f"Failed to establish any database connection. Primary: {primary_error}, Local: {local_error}")
+            else:
+                # On Render.com, we don't have a local fallback option
+                raise RuntimeError(f"Failed to establish database connection on Render.com: {primary_error}")
         else:
             # We're not in a request context and have no DB
             raise RuntimeError("Database connection not available outside request context")
@@ -832,8 +884,91 @@ def authenticate_user(email, password):
     user = db.users.find_one({"email": email})
     if user and check_password_hash(user["password"], password):
         session['user_id'] = str(user['_id'])
+        
+        # If we're using the local database, try to sync with primary DB
+        from flask import current_app
+        if current_app.config.get('USING_LOCAL_DB', False):
+            try:
+                sync_success = sync_local_to_primary_db()
+                if sync_success:
+                    return True, "Login successful. Local data has been synchronized with cloud database."
+            except Exception as e:
+                print(f"Error during database sync attempt: {e}")
+                # Continue with login even if sync fails
+        
         return True, "Login successful."
     return False, "Invalid email or password."
 
 def logout_user():
     session.pop('user_id', None)
+
+def sync_local_to_primary_db():
+    """
+    Synchronize data from local MongoDB to primary MongoDB.
+    This function should be called when:
+    1. A user logs in successfully
+    2. The application detects that it's been using the local database
+    3. The primary database is now available
+    
+    Returns:
+        bool: True if synchronization was successful, False otherwise
+    """
+    from flask import current_app
+    
+    # Only attempt sync if we're currently using the local database
+    if not current_app.config.get('USING_LOCAL_DB', False):
+        print("Not using local DB, no sync needed")
+        return False
+    
+    try:
+        # Connect to local database (our current connection)
+        local_db = get_db()
+        
+        # Try to connect to the primary database
+        mongo_options = current_app.config.get('MONGO_OPTIONS', {})
+        primary_client = MongoClient(current_app.config['MONGO_URI'], **mongo_options)
+        
+        # Test the connection to the primary database
+        primary_client.admin.command('ping')
+        primary_db = primary_client.get_database()
+        
+        # Collections to sync
+        collections = ['processes', 'machines', 'readings', 'users', 'alerts']
+        
+        for collection_name in collections:
+            if collection_name not in local_db.list_collection_names():
+                continue
+                
+            print(f"Syncing {collection_name} collection...")
+            
+            # Get all documents from local collection
+            local_docs = list(local_db[collection_name].find({}))
+            
+            if not local_docs:
+                continue
+                
+            # For each document in local collection, upsert to primary
+            for doc in local_docs:
+                # Use the _id as the unique identifier for upsert
+                if '_id' in doc:
+                    primary_db[collection_name].replace_one(
+                        {'_id': doc['_id']}, 
+                        doc, 
+                        upsert=True
+                    )
+        
+        print("Database synchronization completed successfully")
+        
+        # Switch to the primary database connection
+        g.mongo_client.close()  # Close local connection
+        g.mongo_client = primary_client
+        g.db = primary_db
+        current_app.config['USING_LOCAL_DB'] = False
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error during database synchronization: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

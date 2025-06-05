@@ -21,9 +21,12 @@ def get_process_data(process_name=None):
         db = get_db()
         print("Successfully obtained database connection")
         
+        # Set a limit on fetch operations to prevent timeouts
+        max_time_ms = 5000  # 5 seconds timeout
+        
         if process_name:
-            # Return data for a specific process
-            process = db.processes.find_one({"name": process_name}, {"_id": 0})
+            # Return data for a specific process with timeout
+            process = db.processes.find_one({"name": process_name}, {"_id": 0}, max_time_ms=max_time_ms)
             if not process:
                 return {"error": "Process not found"}
             

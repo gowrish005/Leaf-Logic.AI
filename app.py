@@ -35,19 +35,47 @@ def background_data_generation():
     with app.app_context():
         while True:
             try:
-                # Create a fresh connection each time to avoid connection timeout issues
-                mongo_client = MongoClient(app.config['MONGO_URI'])
-                db = mongo_client.get_database()
-                
-                # Make db available to the generate_readings function
+                # Use the get_db() function which handles fallback to local MongoDB
                 from flask import g
-                g.db = db
+                from models import get_db
                 
-                # Generate new readings
-                generate_readings()
+                try:
+                    # Get database with fallback mechanism
+                    db = get_db()
+                          # Generate new readings with timeout guard (platform-specific)
+                    import platform
+                    
+                    if platform.system() != "Windows":  # signal.SIGALRM not available on Windows
+                        import signal
+                        
+                        def timeout_handler(signum, frame):
+                            raise TimeoutError("Readings generation timed out")
+                            
+                        # Set a 20 second timeout for this operation
+                        signal.signal(signal.SIGALRM, timeout_handler)
+                        signal.alarm(20)
+                    
+                    generate_readings()
+                    
+                    # Cancel the timeout if not on Windows
+                    if platform.system() != "Windows":
+                        signal.alarm(0)
+                    
+                    # If it was a successful operation and we're using local DB, try to sync
+                    if app.config.get('USING_LOCAL_DB', False):
+                        from models import sync_local_to_primary_db
+                        try:
+                            sync_local_to_primary_db()
+                        except Exception as sync_error:
+                            print(f"Background sync error: {sync_error}")
+                    
+                except TimeoutError as e:
+                    print(f"Timeout error in background data generation: {e}")
+                finally:
+                    # Make sure we close the connection if it exists
+                    if hasattr(g, 'mongo_client'):
+                        g.mongo_client.close()
                 
-                # Close the connection after use
-                mongo_client.close()
             except Exception as e:
                 if getattr(app, 'testing', True):
                     print(f"Error in background data generation: {e}")
@@ -60,27 +88,47 @@ def background_data_generation():
 def inject_processes():
     """Make processes data available to all templates"""    
     try:
-        # Create a dedicated MongoDB connection for this context processor
-        mongo_client = MongoClient(app.config['MONGO_URI'])
-        db = mongo_client.get_database()
-        
-        # Make db available to the get_process_data function
+        # Use our get_db function which handles fallback
         from flask import g
-        g.db = db
+        from models import get_db
         
-        # Get the process data
         try:
+            # Get database with fallback mechanism
+            db = get_db()
+              # Get the process data with a timeout guard (platform-specific)
+            import platform
+            
+            if platform.system() != "Windows":  # signal.SIGALRM not available on Windows
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("Process data retrieval timed out")
+                    
+                # Set a 10 second timeout for this operation
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(10)
+            
             processes = get_process_data()
-            # Close the connection after use
-            mongo_client.close()
+            
+            # Cancel the timeout if not on Windows
+            if platform.system() != "Windows":
+                signal.alarm(0)
+            
             return {'processes': processes}
+        except TimeoutError as e:
+            if getattr(app, 'testing', True):
+                print(f"Timeout error: {e}")
+            if hasattr(g, 'mongo_client'):
+                g.mongo_client.close()
+            return {'processes': []}
         except Exception as e:
             if getattr(app, 'testing', True):
                 print(f"Error getting process data in context processor: {e}")
                 import traceback
                 traceback.print_exc()
             # Close the connection if error
-            mongo_client.close()
+            if hasattr(g, 'mongo_client'):
+                g.mongo_client.close()
             return {'processes': []}
     except Exception as e:
         # In case of error, return an empty list to prevent the app from crashing
@@ -98,21 +146,30 @@ if __name__ == '__main__':
     if not app.config.get('SKIP_DB_INIT', False):
         with app.app_context():
             try:
-                # Create a direct database connection for startup operations
-                mongo_client = MongoClient(app.config['MONGO_URI'])
-                db = mongo_client.get_database()
-                
-                # Make db available to the clean_database and other functions
+                # Use our get_db function which handles fallback
                 from flask import g
-                g.db = db
+                from models import get_db
                 
-                clean_database()
-                initialize_models()
-                generate_readings()  # Generate initial readings
-                
-                # Close the startup connection
-                mongo_client.close()
-                print("Database initialized successfully")
+                try:
+                    # Get database connection with fallback
+                    db = get_db()
+                    
+                    # Initialize the database
+                    clean_database()
+                    initialize_models()
+                    generate_readings()  # Generate initial readings
+                    
+                    print(f"Database initialized successfully. Using {'local' if app.config.get('USING_LOCAL_DB', False) else 'primary'} database.")
+                    
+                except Exception as e:
+                    print(f"Error in database operations: {e}")
+                    import traceback
+                    traceback.print_exc()
+                finally:
+                    # Close the connection if it exists
+                    if hasattr(g, 'mongo_client'):
+                        g.mongo_client.close()
+                        
             except Exception as e:
                 print(f"Error initializing database: {e}")
                 print("Continuing without database initialization.")

@@ -6,3 +6,7 @@ Flask-PyMongo==2.3.0
 pytest==7.4.0
 gunicorn==21.2.0
 dnspython==2.4.2
+gevent==22.10.2
+psutil==5.9.5
+pymongo[srv]==4.5.0
+redis==4.5.5

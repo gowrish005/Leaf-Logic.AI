@@ -175,3 +175,41 @@ def register_routes(app):
         })
         
         return jsonify(result)
+    
+    # Add health check endpoint for Render.com
+    @app.route('/health')
+    def health_check():
+        """Health check endpoint for Render.com"""
+        try:
+            # Try to get a database connection to verify everything is working
+            from models import get_db
+            from flask import g
+            
+            try:
+                db = get_db()
+                # Just ping the database
+                db.command('ping')
+                status = "healthy"
+                db_status = "connected"
+            except Exception as e:
+                status = "degraded"
+                db_status = f"error: {str(e)}"
+            finally:
+                # Close the connection if it exists
+                if hasattr(g, 'mongo_client'):
+                    g.mongo_client.close()
+                    
+            # Return health status
+            from flask import jsonify
+            return jsonify({
+                "status": status,
+                "database": db_status,
+                "timestamp": str(datetime.datetime.now())
+            })
+        except Exception:
+            from flask import jsonify
+            return jsonify({
+                "status": "unhealthy", 
+                "database": "unavailable",
+                "timestamp": str(datetime.datetime.now())
+            }), 500

@@ -1,0 +1,25 @@
+{
+  "envVars": [
+    {
+      "key": "RENDER",
+      "value": "true"
+    },
+    {
+      "key": "PYTHONUNBUFFERED",
+      "value": "true"
+    },
+    {
+      "key": "WEB_CONCURRENCY",
+      "value": "3"
+    },
+    {
+      "key": "SKIP_DB_INIT",
+      "value": "false"
+    }
+  ],
+  "healthCheckPath": "/health",
+  "autoRollback": true,
+  "initialInstances": 1,
+  "minInstances": 1,
+  "maxInstances": 2
+}
