@@ -95,8 +95,18 @@ def init_db(app):
     @app.before_request
     def before_request():
         """Connect to MongoDB before each request"""
-        g.mongo_client = MongoClient(app.config['MONGO_URI'])
-        g.db = g.mongo_client.get_database()
+        # If we're running on Render, use our get_db function which handles connection details
+        # This ensures consistent connection handling between the before_request and other functions
+        if hasattr(g, 'db'):  # Already connected
+            return
+            
+        try:
+            # Use the proper get_db function to ensure consistent connection handling
+            # with the same config and fallback mechanism
+            get_db()
+        except Exception as e:
+            print(f"Error connecting to database in before_request: {e}")
+            # Even if there's an error, we'll continue to avoid breaking the whole app
     
     @app.teardown_request
     def teardown_request(exception=None):
@@ -122,11 +132,10 @@ def get_db():
         
         # If we're in a request context but don't have a DB connection,
         # it might be a special route that didn't get the before_request hook
-        if has_request_context():
-            # First try the default MongoDB (cloud)
+        if has_request_context():            # First try the default MongoDB (cloud)
             mongo_options = current_app.config.get('MONGO_OPTIONS', {})
             
-            # If running on Render, add retries with exponential backoff
+            # Adjust SSL settings based on environment
             is_render = current_app.config.get('IS_RENDER', False)
             max_retries = 3 if is_render else 1
             retry_delay = 2  # Start with 2 seconds, will be doubled each retry
@@ -134,8 +143,23 @@ def get_db():
             primary_error = None
             for attempt in range(max_retries):
                 try:
-                    # Try primary MongoDB connection
-                    mongo_client = MongoClient(current_app.config['MONGO_URI'], **mongo_options)
+                    # Import SSL modules to configure them properly
+                    import ssl
+                    import certifi
+                    
+                    # Try primary MongoDB connection with adjusted TLS settings
+                    # Use system CA certificates on Render.com, otherwise use certifi
+                    if is_render:
+                        mongo_client = MongoClient(current_app.config['MONGO_URI'], **mongo_options)
+                    else:
+                        # For local development, use certifi's certificates
+                        mongo_client = MongoClient(
+                            current_app.config['MONGO_URI'],
+                            ssl=True,
+                            ssl_ca_certs=certifi.where(),
+                            **mongo_options
+                        )
+                    
                     mongo_client.admin.command('ping')  # Test connection
                     
                     g.mongo_client = mongo_client
